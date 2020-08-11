@@ -4,9 +4,9 @@ namespace Alfrasc\MatomoTracker;
 
 use Exception;
 use \Illuminate\Http\Request;
-use PiwikTracker;
+use MatomoTracker as MatomoClient;
 
-class MatomoTracker extends PiwikTracker
+class MatomoTracker extends MatomoClient
 {
 
     /** @var string */
@@ -20,101 +20,31 @@ class MatomoTracker extends PiwikTracker
 
     public function __construct(?Request $request, ?int $idSite = null, ?string $apiUrl = null, ?string $tokenAuth = null)
     {
+        $apiUrl = $apiUrl ?: config('matomotracker.url');
+        $idSite = $idSite ?: config('matomotracker.idSite');
+
+        parent::__construct($idSite, $apiUrl);
+
         $this->tokenAuth = $tokenAuth ?: config('matomotracker.tockenAuth');
         $this->queue = config('matomotracker.queue', 'matomotracker');
 
         $this->setTokenAuth(!is_null($tokenAuth) ? $tokenAuth : config('matomotracker.tokenAuth'));
-        $this->setMatomoVariables($request, $idSite, $apiUrl);
+        $this->setMatomoVariables($request);
     }
 
     /**
      * Overrides the PiwikTracker method and uses the \Illuminate\Http\Request for filling in the server vars.
      *
      * @param \Illuminate\Http\Request $request
-     * @param int $idSite
-     * @param string $apiUrl
      *
      * @return void
      */
-    private function setMatomoVariables(Request $request, int $idSite = null, string $apiUrl = null)
+    private function setMatomoVariables(Request $request)
     {
-
-        $this->apiUrl = $apiUrl ?: config('matomotracker.url');
-        $this->idSite = $idSite ?: config('matomotracker.idSite');
-
-        $this->ecommerceItems = array();
-        $this->attributionInfo = false;
-        $this->eventCustomVar = false;
-        $this->forcedDatetime = false;
-        $this->forcedNewVisit = false;
-        $this->generationTime = false;
-        $this->pageCustomVar = false;
-        $this->customParameters = array();
-        $this->customData = false;
-        $this->hasCookies = false;
-        $this->token_auth = false;
-        $this->userAgent = false;
-        $this->country = false;
-        $this->region = false;
-        $this->city = false;
-        $this->lat = false;
-        $this->long = false;
-        $this->width = false;
-        $this->height = false;
-        $this->plugins = false;
-        $this->localHour = false;
-        $this->localMinute = false;
-        $this->localSecond = false;
-        $this->idPageview = false;
-
-        // $this->idSite = $this->idSite;
-        $this->urlReferrer = !empty($request->server('HTTP_REFERER')) ? $request->server('HTTP_REFERER') : false;
-        $this->pageCharset = self::DEFAULT_CHARSET_PARAMETER_VALUES;
-        $this->pageUrl = self::getCurrentUrl();
-        $this->ip = !empty($request->server('REMOTE_ADDR')) ? $request->server('REMOTE_ADDR') : false;
-        $this->acceptLanguage = !empty($request->server('HTTP_ACCEPT_LANGUAGE')) ? $request->server('HTTP_ACCEPT_LANGUAGE') : false;
-        $this->userAgent = !empty($request->server('HTTP_USER_AGENT')) ? $request->server('HTTP_USER_AGENT') : false;
-        if (!empty($apiUrl)) {
-            self::$URL = $this->apiUrl;
-        }
-
-        // Life of the visitor cookie (in sec)
-        $this->configVisitorCookieTimeout = 33955200; // 13 months (365 + 28 days)
-        // Life of the session cookie (in sec)
-        $this->configSessionCookieTimeout = 1800; // 30 minutes
-        // Life of the session cookie (in sec)
-        $this->configReferralCookieTimeout = 15768000; // 6 months
-
-        // Visitor Ids in order
-        $this->userId = false;
-        $this->forcedVisitorId = false;
-        $this->cookieVisitorId = false;
-        $this->randomVisitorId = false;
-
-        $this->setNewVisitorId();
-
-        $this->configCookiesDisabled = false;
-        $this->configCookiePath = self::DEFAULT_COOKIE_PATH;
-        $this->configCookieDomain = '';
-
-        $this->currentTs = time();
-        $this->createTs = $this->currentTs;
-        $this->visitCount = 0;
-        $this->currentVisitTs = false;
-        $this->lastVisitTs = false;
-        $this->ecommerceLastOrderTimestamp = false;
-
-        // Allow debug while blocking the request
-        $this->requestTimeout = 600;
-        $this->doBulkRequests = false;
-        $this->storedTrackingActions = array();
-
-        $this->sendImageResponse = true;
-
-        $this->visitorCustomVar = $this->getCustomVariablesFromCookie();
-
-        $this->outgoingTrackerCookies = array();
-        $this->incomingTrackerCookies = array();
+        $this->urlReferrer = $request->header('referer', false);
+        $this->ip = !empty($request->ip()) ? $request->ip() : false;
+        $this->acceptLanguage = $request->header('accept_language', false);
+        $this->userAgent = $request->header('user_agent', false);
     }
 
     /**
