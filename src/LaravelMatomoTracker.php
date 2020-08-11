@@ -2,12 +2,33 @@
 
 namespace Alfrasc\MatomoTracker;
 
+use Alfrasc\MatomoTracker\Jobs\ProcessQueued;
+use Alfrasc\MatomoTracker\Jobs\TrackPageView;
 use Exception;
 use \Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use MatomoTracker;
 
 class LaravelMatomoTracker extends MatomoTracker
 {
+    const CLI_HEADER = [
+            'urlReferrer' => 'referer',
+            'acceptLanguage' => 'accept_language',
+            'userAgent' => 'user_agent'
+    ];
+
+    const CLI_COOKIES = [
+        'visitorIdCookie' => 'id',
+        'visitorRefCookie' => 'ref',
+        'visitorCvarCookie' => 'cvar',
+        'visitorSesCookie' => 'ses'
+    ];
+
+
+    private $visitorIdCookie = false;
+    private $visitorRefCookie = false;
+    private $visitorCvarCookie = false;
+    private $visitorSesCookie = false;
 
     /** @var string */
     protected $apiUrl;
@@ -25,10 +46,10 @@ class LaravelMatomoTracker extends MatomoTracker
 
         parent::__construct($idSite, $apiUrl);
 
-        $this->tokenAuth = $tokenAuth ?: config('matomotracker.tockenAuth');
+        //$this->tokenAuth = $tokenAuth ?: config('matomotracker.tokenAuth');
         $this->queue = config('matomotracker.queue', 'matomotracker');
 
-        $this->setTokenAuth(!is_null($tokenAuth) ? $tokenAuth : config('matomotracker.tokenAuth'));
+        $this->setTokenAuth($tokenAuth ?: config('matomotracker.tokenAuth'));
         $this->setMatomoVariables($request);
     }
 
@@ -42,9 +63,97 @@ class LaravelMatomoTracker extends MatomoTracker
     private function setMatomoVariables(Request $request)
     {
         $this->urlReferrer = $request->header('referer', false);
-        $this->ip = !empty($request->ip()) ? $request->ip() : false;
         $this->acceptLanguage = $request->header('accept_language', false);
         $this->userAgent = $request->header('user_agent', false);
+        $this->ip = !empty($request->ip()) ? $request->ip() : false;
+    }
+
+    /**
+     * Sets a first party cookie to the client to improve dual JS-PHP tracking.
+     *
+     * This replicates the matomo.js tracker algorithms for consistency and better accuracy.
+     *
+     * @param $cookieName
+     * @param $cookieValue
+     * @param $cookieTTL
+     * @return $this
+     */
+    protected function setCookie($cookieName, $cookieValue, $cookieTTL)
+    {
+        parent::setCookie($cookieName, $cookieValue, $cookieTTL);
+
+        $this->setCliCookie($cookieName, $cookieValue);
+
+        return $this;
+    }
+
+    public function setCliCookie($name, $value)
+    {
+        $cookieVar = array_search($name, static::CLI_COOKIES);
+
+        if($cookieVar === false) {
+            return false;
+        }
+
+        $this->$cookieVar = $value;
+
+        return true;
+    }
+
+    public function getCliCookie($name)
+    {
+        $cookieVar = array_search($name, static::CLI_COOKIES);
+
+        if($cookieVar === false) {
+            return false;
+        }
+
+        return $this->$cookieVar;
+    }
+
+
+    protected function getCookieMatchingName($name)
+    {
+        if ($this->configCookiesDisabled) {
+            return false;
+        }
+
+        if (! is_array($_COOKIE) || empty($_COOKIE)) {
+            return $this->getCliCookie($name);
+        }
+
+        return parent::getCookieMatchingName($name);
+    }
+
+    private function getVariablesForQueue(Request $request)
+    {
+        $vars = [];
+
+        foreach (static::CLI_HEADER as $key => $header) {
+            $vars[$key] = $request->header($header, false);
+        }
+
+        foreach (static::CLI_COOKIES as $key => $cookie) {
+            $vars[$key] = $this->getCookieMatchingName($cookie);
+        }
+
+        $vars['ip'] = $request->ip();
+        $vars['pageUrl'] = self::getCurrentUrl();
+
+        return $vars;
+    }
+
+    /**
+     * Overrides the PiwikTracker method and uses the \Illuminate\Http\Request for filling in the server vars.
+     *
+     *
+     * @return void
+     */
+    public function setMatomoVariablesQueue($vars)
+    {
+        foreach ($vars as $key => $var) {
+            $this->$key = $var;
+        }
     }
 
     /**
@@ -209,6 +318,7 @@ class LaravelMatomoTracker extends MatomoTracker
         return $this->doTrackAction($actionUrl, 'link');
     }
 
+
     /** Queues a pageview
      *
      * @param string $documentTitle
@@ -217,10 +327,18 @@ class LaravelMatomoTracker extends MatomoTracker
      */
     public function queuePageView(string $documentTitle)
     {
-        dispatch(function () use ($documentTitle) {
+        $this->setFirstPartyCookies();
+
+        $matomoVars = $this->getVariablesForQueue(request());
+
+        ProcessQueued::dispatch($matomoVars, 'doTrackPageView', $documentTitle);
+
+        //TrackPageView::dispatch($matomoVars, $documentTitle);
+
+       /* dispatch(function () use ($documentTitle) {
             $this->doTrackPageView($documentTitle);
         })
-            ->onQueue($this->queue);
+            ->onQueue($this->queue);*/
     }
 
     /** Queues an event
