@@ -4,9 +4,9 @@ namespace Alfrasc\MatomoTracker;
 
 use Exception;
 use \Illuminate\Http\Request;
-use MatomoTracker as MatomoClient;
+use MatomoTracker;
 
-class MatomoTracker extends MatomoClient
+class LaravelMatomoTracker extends MatomoTracker
 {
 
     /** @var string */

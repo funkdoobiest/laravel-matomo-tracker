@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\ServiceProvider;
 
-class MatomoTrackerServiceProvider extends ServiceProvider
+class LaravelMatomoTrackerServiceProvider extends ServiceProvider
 {
     /** @var \Illuminate\Http\Request */
     protected $request;
@@ -37,7 +37,7 @@ class MatomoTrackerServiceProvider extends ServiceProvider
 
         // Register the service the package provides.
         $this->app->singleton('matomotracker', function ($app) {
-            return new MatomoTracker(
+            return new LaravelMatomoTracker(
                 $this->request,
                 Config::get('matomotracker.siteId'),
                 Config::get('matomotracker.url'),
